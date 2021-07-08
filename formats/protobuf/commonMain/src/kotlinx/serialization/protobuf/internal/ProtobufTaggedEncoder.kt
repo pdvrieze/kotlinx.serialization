@@ -10,10 +10,11 @@ import kotlinx.serialization.encoding.*
 
 @OptIn(ExperimentalSerializationApi::class)
 internal abstract class ProtobufTaggedEncoder : ProtobufTaggedBase(), Encoder, CompositeEncoder {
-    private enum class NullableMode {
+    protected enum class NullableMode {
         ACCEPTABLE,
         OPTIONAL,
         COLLECTION,
+        COLLECTION_ELEMENT,
         NOT_NULL
     }
     private var nullableMode: NullableMode = NullableMode.NOT_NULL
@@ -38,6 +39,7 @@ internal abstract class ProtobufTaggedEncoder : ProtobufTaggedBase(), Encoder, C
             val message = when (nullableMode) {
                 NullableMode.OPTIONAL -> "'null' is not supported for optional properties in ProtoBuf"
                 NullableMode.COLLECTION -> "'null' is not supported for collection types in ProtoBuf"
+                NullableMode.COLLECTION_ELEMENT -> "'null' is not supported for collection elements in ProtoBuf"
                 NullableMode.NOT_NULL -> "'null' is not allowed for not-null properties"
                 else -> "'null' is not supported in ProtoBuf";
             }
@@ -129,7 +131,7 @@ internal abstract class ProtobufTaggedEncoder : ProtobufTaggedBase(), Encoder, C
         serializer: SerializationStrategy<T>,
         value: T
     ) {
-        nullableMode = NullableMode.NOT_NULL
+        nullableMode = nullableModeForChild(descriptor, index)
 
         pushTag(descriptor.getTag(index))
         encodeSerializableValue(serializer, value)
@@ -141,17 +143,22 @@ internal abstract class ProtobufTaggedEncoder : ProtobufTaggedBase(), Encoder, C
         serializer: SerializationStrategy<T>,
         value: T?
     ) {
-        val elementKind = descriptor.getElementDescriptor(index).kind
-        nullableMode = if (descriptor.isElementOptional(index)) {
-            NullableMode.OPTIONAL
-        } else if (elementKind == StructureKind.MAP || elementKind == StructureKind.LIST) {
-            NullableMode.COLLECTION
-        } else {
-            NullableMode.ACCEPTABLE
-        }
+        nullableMode = nullableModeForChild(descriptor, index)
 
         pushTag(descriptor.getTag(index))
         encodeNullableSerializableValue(serializer, value)
+    }
+
+    protected open fun nullableModeForChild(descriptor: SerialDescriptor, index: Int): NullableMode {
+        val elementKind = descriptor.getElementDescriptor(index).kind
+        return when {
+            descriptor.isElementOptional(index) -> NullableMode.OPTIONAL
+
+            elementKind == StructureKind.MAP ||
+                    elementKind == StructureKind.LIST -> NullableMode.COLLECTION
+
+            else -> NullableMode.ACCEPTABLE
+        }
     }
 
     override fun encodeInline(inlineDescriptor: SerialDescriptor): Encoder {

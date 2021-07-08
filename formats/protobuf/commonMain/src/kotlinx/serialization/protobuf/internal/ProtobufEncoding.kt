@@ -181,6 +181,10 @@ private class RepeatedEncoder(
     descriptor: SerialDescriptor
 ) : ProtobufEncoder(proto, writer, descriptor) {
     override fun SerialDescriptor.getTag(index: Int) = curTag
+
+    override fun nullableModeForChild(descriptor: SerialDescriptor, index: Int): NullableMode {
+        return NullableMode.COLLECTION_ELEMENT
+    }
 }
 
 private class NestedRepeatedEncoder(
